@@ -203,7 +203,7 @@ module SwaggerAutogenerate
           keys.each { |inner_key| first_key = "#{first_key}[#{inner_key}]" }
           first_key = "#{first_key}[#{key}]"
 
-          payload_hash.merge!({ first_key => { 'type' => schema_type(value), 'example' => value } })
+          payload_hash.merge!({ first_key => { 'type' => schema_type(value), 'example' => example(value) } })
         end
       end
     end
