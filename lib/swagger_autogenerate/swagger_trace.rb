@@ -134,8 +134,8 @@ module SwaggerAutogenerate
     def schema_data(value)
       type = schema_type(value)
       hash = { 'type' => type }
-
-      hash['properties'] = properties_data(value) if type == 'object'
+      hash['properties'] = {}
+      hash['properties'] = properties_data(value) if type == 'object' && !value.nil?
 
       hash
     end
