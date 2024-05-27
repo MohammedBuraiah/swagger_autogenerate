@@ -1,34 +1,70 @@
 # SwaggerAutogenerate
+automating Swagger YAML generation in Ruby on Rails offers a range of benefits for API documentation. By leveraging the power of the swagger_autogenerate gem, developers can:
+1) save time and effort
+2) (up to date) reducing the chances of inconsistencies between the actual API implementation and its documentation.
+3) improves the overall development workflow by providing a seamless integration with testing frameworks like RSpec.
+4) resulting in better communication and understanding of the APIs.
 
-TODO: Delete this and the text below, and describe your gem
-
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/swagger_autogenerate`. To experiment with that code, run `bin/console` for an interactive prompt.
+The gem automatically observes the request/response patterns during the execution of test scenarios, generating accurate Swagger YAML files that reflect the API's behavior. developers and consumers can better understand and interact with the APIs.
 
 ## Installation
 
-TODO: Replace `UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG` with your gem name right after releasing it to RubyGems.org. Please do not do it earlier due to security reasons. Alternatively, replace this section with instructions to install your gem from git if you don't plan to release to RubyGems.org.
+1) Open your Gemfile located at ./Gemfile
+2) Add the following line to the Gemfile within the appropriate group (e.g., :test):
 
-Install the gem and add to the application's Gemfile by executing:
+    ```
+    group :test do
+      gem 'swagger_autogenerate'
+    end
+    ```
+3) Install the gem and add to the application's Gemfile by executing:
+    $ bundle install
 
-    $ bundle add UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+## Configuration
 
-If bundler is not being used to manage dependencies, install the gem by executing:
+To configure the swagger_autogenerate gem in your Rails application, follow these steps:
 
-    $ gem install UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+### Step 1:
+1) Open the app/controllers/application_controller.rb
+2) Inside the class ApplicationController block.
+3) Add the following code:
+```
+    include SwaggerAutogenerate if Rails.env.test? && ENV['SWAGGER'].present?
+```
 
-## Usage
+### Step 2 (optional)
+1) Create a file called swagger_autogenerate.rb in the ./config/initializers
+2) Open the ./config/initializers/swagger/swagger_autogenerate.rb
+3) Add the following code to the swagger_autogenerate.rb
+```
+module SwaggerAutogenerate
+  class SwaggerTrace
+    WITH_CONFIG = true
+    WITH_MULTIPLE_EXAMPLES = true
+    WITH_EXAMPLE_DESCRIPTION = true
+    WITH_RESPONSE_DESCRIPTION = true
+    SWAGGER_ENVIRONMENT_VARIABLE = 'SWAGGER'
+  end
+end
+```
+$ This file is optional and allows you to customize the behavior of the gem by providing additional options.
 
-TODO: Write usage instructions here
+## Example
+To generate Swagger YAML documentation for the APIs implemented in the EmployeesController class, you can follow these steps:
+1) Ensure that you have the swagger_autogenerate gem installed and configured in your Rails application, as described later.
+2) Create a spec file for the EmployeesController class at the path:
+$ spec/your_path/employees_controller_spec.rb
+This file should contain the test scenarios for each action (e.g., index, show, create) of the controller.
 
-## Development
+3)Run the spec code using the rspec command and set the environment variable SWAGGER to the desired YAML file name. For example:
+```
+SWAGGER='employee_apis.yaml' rspec spec/your_path/employees_controller_spec.rb
+```
+4) This command runs the spec file and instructs the swagger_autogenerate gem to generate Swagger YAML documentation and save it to the file named employee_apis.yaml.
+5) Once the command finishes executing, you will have the Swagger YAML documentation generated based on the test scenarios in the employees_controller_spec.rb file.
 
-After checking out the repo, run `bin/setup` to install dependencies. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
-
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and the created tag, and push the `.gem` file to [rubygems.org](https://rubygems.org).
-
-## Contributing
-
-Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/swagger_autogenerate. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [code of conduct](https://github.com/[USERNAME]/swagger_autogenerate/blob/master/CODE_OF_CONDUCT.md).
+### Please note 
+that the generated documentation will depend on the test scenarios defined in your employees_controller_spec.rb  file. Make sure to have comprehensive test scenarios that cover  different scenarios and expected responses for accurate and detailed  Swagger documentation.
 
 ## License
 
