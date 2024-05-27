@@ -5,20 +5,20 @@ require_relative "lib/swagger_autogenerate/version"
 Gem::Specification.new do |spec|
   spec.name = "swagger_autogenerate"
   spec.version = SwaggerAutogenerate::VERSION
-  spec.authors = ["mohammed-buraiah"]
+  spec.authors = ["MohammedBuraiah"]
   spec.email = ["mohammed.buraiah.1996@gmail.com"]
 
-  spec.summary = "Write a short summary, because RubyGems requires one."
-  spec.description = "Write a longer description or delete this line."
-  spec.homepage = "https://github.com/mohammedburaiah/swagger_autogenerate"
+  spec.summary = "Automating Swagger YAML generation in Ruby on Rails offers a range of benefits for API documentation"
+  spec.description = "Generating Swagger YAML Automatically Based on Existing Test Cases in Ruby on Rails"
+  spec.homepage = "https://github.com/MohammedBuraiah/swagger_autogenerate"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 2.6.0"
 
-  spec.metadata["allowed_push_host"] = "Set to your gem server 'https://example.com'"
+  spec.metadata["allowed_push_host"] = "https://rubygems.org"
 
   spec.metadata["homepage_uri"] = spec.homepage
-  spec.metadata["source_code_uri"] = "https://github.com/mohammedburaiah/swagger_autogenerate"
-  spec.metadata["changelog_uri"] = "https://github.com/mohammedburaiah/swagger_autogenerate"
+  spec.metadata["source_code_uri"] = "https://github.com/MohammedBuraiah/swagger_autogenerate"
+  spec.metadata["changelog_uri"] = "https://github.com/MohammedBuraiah/swagger_autogenerate"
 
   # Specify which files should be added to the gem when it is released.
   # The `git ls-files -z` loads the files in the RubyGem that have been added into git.
