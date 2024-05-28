@@ -18,7 +18,9 @@ The gem automatically observes the request/response patterns during the executio
     end
     ```
 3) Install the gem and add to the application's Gemfile by executing:
-    $ bundle install
+   ```
+   bundle install
+   ```
 
 ## Configuration
 
@@ -31,6 +33,11 @@ To configure the swagger_autogenerate gem in your Rails application, follow thes
 ```
     include SwaggerAutogenerate if Rails.env.test? && ENV['SWAGGER'].present?
 ```
+in the #Example-step you will set the ENV['SWAGGER'], 
+
+By setting the ENV['SWAGGER'] environment variable, you can specify the path to the new file,
+whether it's a specific file (e.g., ../myfile.yaml) or a directory (e.g., ../docs).
+This flexibility ensures that the documentation can be easily integrated into your project's structure and workflow.
 
 ### Step 2 (optional)
 1) Create a file called swagger_autogenerate.rb in the ./config/initializers
@@ -56,7 +63,7 @@ To generate Swagger YAML documentation for the APIs implemented in the Employees
 $ spec/your_path/employees_controller_spec.rb
 This file should contain the test scenarios for each action (e.g., index, show, create) of the controller.
 
-3)Run the spec code using the rspec command and set the environment variable SWAGGER to the desired YAML file name. For example:
+3) Run the spec code using the rspec command and set the environment variable SWAGGER to the desired YAML file name. For example:
 ```
 SWAGGER='employee_apis.yaml' rspec spec/your_path/employees_controller_spec.rb
 ```
@@ -69,7 +76,3 @@ that the generated documentation will depend on the test scenarios defined in yo
 ## License
 
 The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
-
-## Code of Conduct
-
-Everyone interacting in the SwaggerAutogenerate project's codebases, issue trackers, chat rooms and mailing lists is expected to follow the [code of conduct](https://github.com/[USERNAME]/swagger_autogenerate/blob/master/CODE_OF_CONDUCT.md).
