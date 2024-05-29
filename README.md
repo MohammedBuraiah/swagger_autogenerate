@@ -7,6 +7,12 @@ automating Swagger YAML generation in Ruby on Rails offers a range of benefits f
 
 The gem automatically observes the request/response patterns during the execution of test scenarios, generating accurate Swagger YAML files that reflect the API's behavior. developers and consumers can better understand and interact with the APIs.
 
+## Dependencies
+
+The SwaggerAutogenerate gem depends on the rspec-rails gem, which brings the RSpec testing framework to Ruby on Rails.
+Please install rspec-rails first: https://github.com/rspec/rspec-rails
+Then continue the installation process.
+
 ## Installation
 
 1) Open your Gemfile located at ./Gemfile
