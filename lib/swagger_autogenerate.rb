@@ -5,7 +5,7 @@ module SwaggerAutogenerate
   require_relative 'swagger_autogenerate/swagger_trace.rb'
 
   included do
-    if defined?(Rails) && Rails.env.test? && ENV[SwaggerTrace::SWAGGER_ENVIRONMENT_VARIABLE].present?
+    if defined?(Rails) && ENV[SwaggerTrace.swagger_environment_variable].present?
       def process_action(*args)
         super
 
