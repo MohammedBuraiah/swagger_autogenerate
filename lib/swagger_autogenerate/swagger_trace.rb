@@ -1,15 +1,15 @@
-require_relative 'swagger_public_methods'
 require_relative 'configuration'
 
 module SwaggerAutogenerate
   class SwaggerTrace
-    include SwaggerPublicMethods
-
     def initialize(request, response)
       @with_config = ::SwaggerAutogenerate.configuration.with_config
       @with_multiple_examples = ::SwaggerAutogenerate.configuration.with_multiple_examples
       @with_example_description = ::SwaggerAutogenerate.configuration.with_example_description
       @with_response_description = ::SwaggerAutogenerate.configuration.with_response_description
+      @security = ::SwaggerAutogenerate.configuration.security
+      @swagger_config = ::SwaggerAutogenerate.configuration.swagger_config
+      @response_status = ::SwaggerAutogenerate.configuration.response_status
       @request = request
       @response = response
       @@paths = {}
@@ -34,7 +34,7 @@ module SwaggerAutogenerate
 
     attr_reader :request, :response, :current_path, :yaml_file, :configuration,
                 :with_config, :with_multiple_examples, :with_example_description,
-                :with_response_description
+                :with_response_description, :security, :response_status
 
     # main methods
 
@@ -308,13 +308,6 @@ module SwaggerAutogenerate
 
     def paths
       @@paths ||= {}
-    end
-
-    def security
-      [
-        'org_slug' => [],
-        'locale' => []
-      ]
     end
 
     def controller_name
