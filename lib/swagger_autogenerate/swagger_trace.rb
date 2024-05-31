@@ -17,8 +17,10 @@ module SwaggerAutogenerate
     end
 
     def call
-      read_swaggger_trace
-      write_swaggger_trace
+      if ENV[SWAGGER_ENVIRONMENT_VARIABLE].present?
+        read_swagger_trace
+        write_swagger_trace
+      end
     end
 
     private
@@ -27,7 +29,7 @@ module SwaggerAutogenerate
 
     # main methods
 
-    def read_swaggger_trace
+    def read_swagger_trace
       path = request.path
 
       request.path_parameters.except(:controller, :format, :action).each do |k, v|
@@ -53,7 +55,7 @@ module SwaggerAutogenerate
       paths[path.to_s].merge!(hash)
     end
 
-    def write_swaggger_trace
+    def write_swagger_trace
       if paths[current_path][request.method.downcase].present?
         paths[current_path][request.method.downcase]['responses'] = swagger_response
       end
