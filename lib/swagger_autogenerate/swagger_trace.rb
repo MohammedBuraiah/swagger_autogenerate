@@ -1,31 +1,40 @@
 require_relative 'swagger_public_methods'
+require_relative 'configuration'
 
 module SwaggerAutogenerate
   class SwaggerTrace
-    WITH_CONFIG = true
-    WITH_MULTIPLE_EXAMPLES = true
-    WITH_EXAMPLE_DESCRIPTION = true
-    WITH_RESPONSE_DESCRIPTION = true
-    SWAGGER_ENVIRONMENT_VARIABLE = 'SWAGGER'
-
     include SwaggerPublicMethods
 
     def initialize(request, response)
+      @with_config = ::SwaggerAutogenerate.configuration.with_config
+      @with_multiple_examples = ::SwaggerAutogenerate.configuration.with_multiple_examples
+      @with_example_description = ::SwaggerAutogenerate.configuration.with_example_description
+      @with_response_description = ::SwaggerAutogenerate.configuration.with_response_description
       @request = request
       @response = response
       @@paths = {}
     end
 
     def call
-      if ENV[SWAGGER_ENVIRONMENT_VARIABLE].present?
+      if ENV[swagger_environment_variable].present?
         read_swagger_trace
         write_swagger_trace
       end
     end
 
+    def self.swagger_environment_variable
+      ::SwaggerAutogenerate.configuration.swagger_environment_variable
+    end
+
+    def swagger_environment_variable
+      SwaggerTrace.swagger_environment_variable
+    end
+
     private
 
-    attr_reader :request, :response, :current_path, :yaml_file
+    attr_reader :request, :response, :current_path, :yaml_file, :configuration,
+                :with_config, :with_multiple_examples, :with_example_description,
+                :with_response_description
 
     # main methods
 
@@ -69,7 +78,7 @@ module SwaggerAutogenerate
 
     def create_file
       File.open(swagger_location, 'w') do |file|
-        data = WITH_CONFIG ? swagger_config : {}
+        data = with_config ? swagger_config : {}
         data['paths'] = paths
         organize_result(data['paths'])
         data = data.to_hash
@@ -87,7 +96,7 @@ module SwaggerAutogenerate
 
       return create_file if yaml_file.nil? || yaml_file['paths'].nil?
 
-      yaml_file.merge!(swagger_config) if WITH_CONFIG
+      yaml_file.merge!(swagger_config) if with_config
 
       apply_yaml_file_changes
       organize_result(yaml_file['paths'])
@@ -185,7 +194,7 @@ module SwaggerAutogenerate
         swagger_response = { 'file' => 'file/data' }
       end
 
-      hash['description'] = response_description if WITH_RESPONSE_DESCRIPTION
+      hash['description'] = response_description if with_response_description
       hash['headers'] = {} # response.headers
       hash['content'] = content_json_example(swagger_response)
 
@@ -315,10 +324,10 @@ module SwaggerAutogenerate
     def swagger_location
       return @swagger_location if instance_variable_defined?(:@swagger_location)
 
-      if ENV[SWAGGER_ENVIRONMENT_VARIABLE].include?('.yaml') || ENV[SWAGGER_ENVIRONMENT_VARIABLE].include?('.yml')
-        @swagger_location = Rails.root.join(ENV.fetch(SWAGGER_ENVIRONMENT_VARIABLE, nil).to_s).to_s
+      if ENV[swagger_environment_variable].include?('.yaml') || ENV[swagger_environment_variable].include?('.yml')
+        @swagger_location = Rails.root.join(ENV.fetch(swagger_environment_variable, nil).to_s).to_s
       else
-        directory_path = Rails.root.join(ENV.fetch(SWAGGER_ENVIRONMENT_VARIABLE, nil).to_s).to_s
+        directory_path = Rails.root.join(ENV.fetch(swagger_environment_variable, nil).to_s).to_s
         FileUtils.mkdir_p(directory_path) unless File.directory?(directory_path)
         @swagger_location = "#{directory_path}/#{tags.first}.yaml"
       end
@@ -344,7 +353,7 @@ module SwaggerAutogenerate
           }
         }
       }
-      hash['application/json']['examples']['example-0']['description'] = "payload => #{example_description}" if WITH_EXAMPLE_DESCRIPTION && !example_description.empty?
+      hash['application/json']['examples']['example-0']['description'] = "payload => #{example_description}" if with_example_description && !example_description.empty?
 
       hash
     end
@@ -386,7 +395,7 @@ module SwaggerAutogenerate
       unless old_examples.value?(current_example)
         last_example = json_example_plus_one(old_examples.keys.last)
         last_example ||= 'example-0'
-        last_example = 'example-0' unless WITH_MULTIPLE_EXAMPLES
+        last_example = 'example-0' unless with_multiple_examples
         yaml_file['paths'][current_path][request.method.downcase]['responses'][response.status.to_s]['content']['application/json']['examples'][last_example] = current_example
       end
 
