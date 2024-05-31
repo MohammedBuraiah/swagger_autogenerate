@@ -37,28 +37,21 @@ To configure the swagger_autogenerate gem in your Rails application, follow thes
 2) Inside the class ApplicationController block.
 3) Add the following code:
 ```
-    include SwaggerAutogenerate if Rails.env.test? && ENV['SWAGGER'].present?
+    include SwaggerAutogenerate if Rails.env.test?
 ```
-in the #Example-step you will set the ENV['SWAGGER'], 
-
-By setting the ENV['SWAGGER'] environment variable, you can specify the path to the new file,
-whether it's a specific file (e.g., ../myfile.yaml) or a directory (e.g., ../docs).
-This flexibility ensures that the documentation can be easily integrated into your project's structure and workflow.
 
 ### Step 2 (optional)
 1) Create a file called swagger_autogenerate.rb in the ./config/initializers
-2) Open the ./config/initializers/swagger/swagger_autogenerate.rb
+2) Open the ./config/initializers/swagger_autogenerate.rb
 3) Add the following code to the swagger_autogenerate.rb
 ```
-module SwaggerAutogenerate
-  class SwaggerTrace
-    WITH_CONFIG = true
-    WITH_MULTIPLE_EXAMPLES = true
-    WITH_EXAMPLE_DESCRIPTION = true
-    WITH_RESPONSE_DESCRIPTION = true
-    SWAGGER_ENVIRONMENT_VARIABLE = 'SWAGGER'
-  end
+SwaggerAutogenerate.configure do |config|
+  config.with_config = true
+  config.with_example_description = true
+  config.with_multiple_examples = true
+  config.with_response_description = true
 end
+
 ```
 $ This file is optional and allows you to customize the behavior of the gem by providing additional options.
 
