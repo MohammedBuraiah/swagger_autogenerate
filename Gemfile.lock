@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    swagger_autogenerate (1.0.7)
+    swagger_autogenerate (1.0.9)
 
 GEM
   remote: https://rubygems.org/
