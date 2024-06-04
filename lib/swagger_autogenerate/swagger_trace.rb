@@ -34,7 +34,7 @@ module SwaggerAutogenerate
 
     attr_reader :request, :response, :current_path, :yaml_file, :configuration,
                 :with_config, :with_multiple_examples, :with_example_description,
-                :with_response_description, :security, :response_status، :swagger_config
+                :with_response_description, :security, :response_status, :swagger_config
 
     # main methods
 
