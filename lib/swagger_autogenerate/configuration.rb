@@ -1,7 +1,8 @@
 module SwaggerAutogenerate
   class Configuration
     attr_accessor :with_config, :with_multiple_examples, :with_example_description,
-                  :with_response_description, :swagger_environment_variable
+                  :with_response_description, :swagger_environment_variable,
+                  :environment_name, :security, :swagger_config, :response_status
 
     def initialize
       @with_config = true
@@ -9,6 +10,7 @@ module SwaggerAutogenerate
       @with_example_description = true
       @with_response_description = true
       @swagger_environment_variable = 'SWAGGER'
+      @environment_name = :test
       @security = security
       @swagger_config = swagger_config
       @response_status = response_status

@@ -16,10 +16,8 @@ module SwaggerAutogenerate
     end
 
     def call
-      if ENV[swagger_environment_variable].present?
-        read_swagger_trace
-        write_swagger_trace
-      end
+      read_swagger_trace
+      write_swagger_trace
     end
 
     def self.swagger_environment_variable
@@ -28,6 +26,14 @@ module SwaggerAutogenerate
 
     def swagger_environment_variable
       SwaggerTrace.swagger_environment_variable
+    end
+
+    def self.environment_name
+      ::SwaggerAutogenerate.configuration.environment_name
+    end
+
+    def environment_name
+      SwaggerTrace.environment_name
     end
 
     private
