@@ -226,7 +226,16 @@ module SwaggerAutogenerate
     end
 
     def content_form_data(data)
-      convert_to_multipart(data)
+      hash_data = {}
+      data.map do |key, value|
+        if value.is_a?(Hash)
+          hash_data.merge!({ key => value })
+        else
+          payload_hash.merge!({ key => { 'type' => schema_type(value), 'example' => example(value) } })
+        end
+      end
+
+      convert_to_multipart(hash_data)
       converted_payload = @payload_hash.clone
       @payload_hash = nil
       @payload_keys = nil

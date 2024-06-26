@@ -11,12 +11,12 @@ module SwaggerAutogenerate
       @with_response_description = true
       @swagger_environment_variable = 'SWAGGER'
       @environment_name = :test
-      @security = security
-      @swagger_config = swagger_config
-      @response_status = response_status
+      @security = default_security
+      @swagger_config = default_swagger_config
+      @response_status = default_response_status
     end
 
-    def response_status
+    def default_response_status
       {
         100 => 'The initial part of the request has been received, and the client should proceed with sending the remainder of the request',
         101 => 'The server agrees to switch protocols and is acknowledging the client\'s request to change the protocol being used',
@@ -42,7 +42,7 @@ module SwaggerAutogenerate
       }
     end
 
-    def swagger_config
+    def default_swagger_config
       {
         'openapi' => '3.0.0',
         'info' => {
@@ -63,7 +63,7 @@ module SwaggerAutogenerate
       }
     end
 
-    def security
+    def default_security
       [
         { 'org_slug' => [] },
         { 'locale' => [] }
