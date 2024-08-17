@@ -1,12 +1,14 @@
 module SwaggerAutogenerate
   class Configuration
-    attr_accessor :with_config, :with_multiple_examples, :with_example_description,
+    attr_accessor :with_config, :with_multiple_examples, :with_rspec_examples, :with_example_description,
                   :with_response_description, :swagger_environment_variable,
                   :environment_name, :security, :swagger_config, :response_status
 
     def initialize
       @with_config = true
       @with_multiple_examples = true
+      @with_rspec_examples = true
+      # remove this when we do not need it any more
       @with_example_description = true
       @with_response_description = true
       @swagger_environment_variable = 'SWAGGER'
@@ -77,5 +79,10 @@ module SwaggerAutogenerate
 
   def self.configure
     yield(configuration)
+  end
+
+  def self.extract_description(full_rspec_description)
+    parts = full_rspec_description.split(' ')
+    parts&.length > 1 ? parts[2..-1].join(" ") : full_rspec_description
   end
 end

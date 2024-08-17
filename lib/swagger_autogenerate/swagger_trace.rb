@@ -5,7 +5,7 @@ module SwaggerAutogenerate
     def initialize(request, response)
       @with_config = ::SwaggerAutogenerate.configuration.with_config
       @with_multiple_examples = ::SwaggerAutogenerate.configuration.with_multiple_examples
-      @with_example_description = ::SwaggerAutogenerate.configuration.with_example_description
+      @with_rspec_examples = ::SwaggerAutogenerate.configuration.with_rspec_examples
       @with_response_description = ::SwaggerAutogenerate.configuration.with_response_description
       @security = ::SwaggerAutogenerate.configuration.security
       @swagger_config = ::SwaggerAutogenerate.configuration.swagger_config
@@ -39,7 +39,7 @@ module SwaggerAutogenerate
     private
 
     attr_reader :request, :response, :current_path, :yaml_file, :configuration,
-                :with_config, :with_multiple_examples, :with_example_description,
+                :with_config, :with_multiple_examples, :with_rspec_examples,
                 :with_response_description, :security, :response_status, :swagger_config
 
     # main methods
@@ -88,6 +88,13 @@ module SwaggerAutogenerate
         data['paths'] = paths
         organize_result(data['paths'])
         data = data.to_hash
+        # handel examples names
+        example_title = full_rspec_description.present? ? full_rspec_description : 'example-0'
+        old_examples = data['paths'][current_path][request.method.downcase]['responses'][response.status.to_s]['content']['application/json']['examples']
+        current_example = old_examples[example_title]
+        new_example(example_title, current_example, old_examples, data['paths'], true)
+        # result
+
         result = add_quotes_to_dates(YAML.dump(data))
         file.write(result)
       end
@@ -209,17 +216,24 @@ module SwaggerAutogenerate
       }
     end
 
-    def convert_to_multipart(payload)
+    def convert_to_multipart(payload, main_key = nil, index = nil)
+      payload_keys.push(main_key) if main_key.present?
       payload.each do |key, value|
         if value.is_a?(Hash)
           payload_keys.push(key)
           convert_to_multipart(value)
+        elsif value.is_a?(Array)
+          value.each_with_index { |v, index| convert_to_multipart(v, key, index) }
         else
           keys = payload_keys.clone
           first_key = keys.shift
-          keys.each { |inner_key| first_key = "#{first_key}[#{inner_key}]" }
-          first_key = "#{first_key}[#{key}]"
+          if index.present?
+            keys.each { |inner_key| first_key = "#{first_key}[#{inner_key}][#{index}]" }
+          else
+            keys.each { |inner_key| first_key = "#{first_key}[#{inner_key}]" }
+          end
 
+          first_key = "#{first_key}[#{key}]"
           payload_hash.merge!({ first_key => { 'type' => schema_type(value), 'example' => example(value) } })
         end
       end
@@ -230,6 +244,8 @@ module SwaggerAutogenerate
       data.map do |key, value|
         if value.is_a?(Hash)
           hash_data.merge!({ key => value })
+        elsif value.is_a?(Array)
+          value.each_with_index { |v, index| convert_to_multipart(v, key) }
         else
           payload_hash.merge!({ key => { 'type' => schema_type(value), 'example' => example(value) } })
         end
@@ -250,10 +266,93 @@ module SwaggerAutogenerate
       }
     end
 
+    def json_to_content_form_data(json)
+      {
+        'multipart/form-data' => {
+          'schema' => build_properties(json)
+        }
+      }
+    end
+
+    def build_properties(json)
+      case json
+      when Hash
+        hash_properties = json.transform_values { |value| build_properties(value) if value.present? }
+        hash_properties = hash_properties.delete_if { |_k, v| !v.present? }
+
+        hashs = {
+          'type' => 'object',
+          'properties' => hash_properties
+        }
+      when Array
+        item_schemas = json.map { |item| build_properties(item) }
+        merged_schema = merge_array_schemas(item_schemas)
+
+        if merged_schema[:type] == 'object'
+          { 'type' => 'array', 'items' => merged_schema }
+        else
+          { 'type' => 'array', 'items' => { 'oneOf' => item_schemas.uniq } }
+        end
+      when String
+        { 'type' => 'string', 'example' => json }
+      when Integer
+        { 'type' => 'integer', 'example' => json }
+      when Float
+        { 'type' => 'number', 'example' => json }
+      when TrueClass, FalseClass
+        { 'type' => 'boolean', 'example' => json }
+      else
+        { 'type' => 'string', 'example' => json.to_s }
+      end
+    end
+
+    def merge_array_schemas(schemas)
+      return {} if schemas.empty?
+
+      # Attempt to merge all schemas into a single schema
+      schemas.reduce do |merged, schema|
+        merge_properties(merged, schema)
+      end
+    end
+
+    def merge_properties(old_data, new_data)
+      return old_data unless old_data.is_a?(Hash) && new_data.is_a?(Hash)
+
+      merged = old_data.dup
+      new_data.each do |key, value|
+        merged[key] = if merged[key].is_a?(Hash) && value.is_a?(Hash)
+                        merge_properties(merged[key], value)
+                      else
+                        value
+                      end
+      end
+      merged
+    end
+
+    def content_application_json_schema_properties(data)
+      hash_data = {}
+      data.map do |key, value|
+        if value.is_a?(Hash)
+          hash_data.merge!({ key => value })
+        elsif value.is_a?(Array)
+          value.each_with_index { |v, index| convert_to_multipart(v, key, index) }
+        else
+          payload_hash.merge!({ key => { 'type' => schema_type(value), 'example' => example(value) } })
+        end
+      end
+
+      convert_to_multipart(hash_data)
+      converted_payload = @payload_hash.clone
+      @payload_hash = nil
+      @payload_keys = nil
+
+      converted_payload
+    end
+
     def content_body(data)
       hash = {}
       # hash.merge!(content_json(data))
-      hash.merge!(content_form_data(data))
+      hash.merge!(json_to_content_form_data(data))
 
       { 'content' => hash }
     end
@@ -351,19 +450,18 @@ module SwaggerAutogenerate
     end
 
     def content_json_example(data)
-      hash = {
+      example_title = full_rspec_description.present? ? full_rspec_description : 'example-0'
+
+      {
         'application/json' => {
           'schema' => { 'type' => 'object' },
           'examples' => {
-            'example-0' => {
+            example_title => {
               'value' => data
             }
           }
         }
       }
-      hash['application/json']['examples']['example-0']['description'] = "payload => #{example_description}" if with_example_description && !example_description.empty?
-
-      hash
     end
 
     def example_description
@@ -396,18 +494,46 @@ module SwaggerAutogenerate
       @payload_hash ||= {}
     end
 
-    def new_example
-      current_example = swagger_response[response.status.to_s]['content']['application/json']['examples']['example-0']
-      old_examples = old_paths[current_path][request.method.downcase]['responses'][response.status.to_s]['content']['application/json']['examples']
-
-      unless old_examples.value?(current_example)
-        last_example = json_example_plus_one(old_examples.keys.last)
-        last_example ||= 'example-0'
-        last_example = 'example-0' unless with_multiple_examples
-        yaml_file['paths'][current_path][request.method.downcase]['responses'][response.status.to_s]['content']['application/json']['examples'][last_example] = current_example
+    def new_example(example_title, current_example, old_examples, all_paths = yaml_file['paths'], with_schema_properties = false)
+      if !old_examples.value?(current_example)
+        last_example = handel_name_last_example(old_examples)
+        last_example ||= example_title
+        last_example = example_title unless with_multiple_examples
+        all_paths[current_path][request.method.downcase]['responses'][response.status.to_s]['content']['application/json']['examples'][last_example] = current_example
+        add_properties_to_schema(last_example, all_paths[current_path])
+      elsif with_schema_properties
+        add_properties_to_schema(full_rspec_description.present? ? full_rspec_description : 'example-0', all_paths[current_path])
       end
 
       true
+    end
+
+    def handel_name_last_example(old_examples)
+      last_example = old_examples.keys.last
+      last_example += '-1' if json_example_plus_one(last_example) == last_example
+      json_example_plus_one(last_example)
+    end
+
+    def add_properties_to_schema(last_example, main_path = yaml_file['paths'][current_path])
+      parameters = {}
+      parameters.merge!(request_parameters.values.first, query_parameters.values.first, path_parameters.values.first)
+      hash = {
+        last_example => build_properties(parameters.as_json)
+      }
+
+      main_path[request.method.downcase]['responses'][response.status.to_s].deep_merge!(
+        {
+          'content' => {
+            'application/json' => {
+              'schema' => {
+                'description' => 'These are the payloads for each example',
+                'type' => 'object',
+                'properties' => hash
+              }
+            }
+          }
+        }
+      )
     end
 
     def apply_yaml_file_changes
@@ -438,24 +564,29 @@ module SwaggerAutogenerate
     def check_path
       unless old_paths.key?(current_path)
         yaml_file['paths'].merge!({ current_path => paths[current_path] })
+        update_example_title(true)
       end
     end
 
     def check_method
       unless old_paths[current_path].key?(request.method.downcase)
         yaml_file['paths'][current_path][request.method.downcase] = { 'responses' => swagger_response }
+        update_example_title(true)
       end
     end
 
     def check_status
+      example_title = full_rspec_description.present? ? full_rspec_description : 'example-0'
       if old_paths[current_path][request.method.downcase]['responses'].present?
         if old_paths[current_path][request.method.downcase]['responses']&.key?(response.status.to_s)
-          new_example
+          update_example_title
         else
           yaml_file['paths'][current_path][request.method.downcase]['responses'].merge!(swagger_response)
+          update_example_title(true)
         end
       else
         yaml_file['paths'][current_path][request.method.downcase]['responses'] = swagger_response
+        update_example_title
       end
     end
 
@@ -481,12 +612,31 @@ module SwaggerAutogenerate
 
     def check_request_body
       if paths[current_path][request.method.downcase]['requestBody'].present?
-        param_names = paths[current_path][request.method.downcase]['requestBody']['content']['multipart/form-data']['schema']['properties'].keys - yaml_file['paths'][current_path][request.method.downcase]['requestBody']['content']['multipart/form-data']['schema']['properties'].keys
-        param_names.each do |param_name|
-          param = paths[current_path][request.method.downcase]['requestBody']['content']['multipart/form-data']['schema']['properties'].select { |parameter| parameter == param_name }
-          yaml_file['paths'][current_path][request.method.downcase]['requestBody']['content']['multipart/form-data']['schema']['properties'].merge!(param)
+        param_current_hash = paths[current_path][request.method.downcase]['requestBody']['content']['multipart/form-data']['schema']['properties']
+        param_current_file = yaml_file['paths'][current_path][request.method.downcase]['requestBody']['content']['multipart/form-data']['schema']['properties']
+        if param_current_hash.present? && param_current_file.present?
+          param_names = param_current_hash.keys - param_current_file.keys
+          param_names.each do |param_name|
+            param = paths[current_path][request.method.downcase]['requestBody']['content']['multipart/form-data']['schema']['properties'].select { |parameter| parameter == param_name }
+            yaml_file['paths'][current_path][request.method.downcase]['requestBody']['content']['multipart/form-data']['schema']['properties'].merge!(param)
+          end
         end
       end
+    end
+
+    def update_example_title(with_schema_properties = false)
+      example_title = full_rspec_description.present? ? full_rspec_description : 'example-0'
+      current_example = swagger_response[response.status.to_s]['content']['application/json']['examples'][example_title]
+      old_examples = old_paths[current_path][request.method.downcase]['responses'][response.status.to_s]['content']['application/json']['examples']
+      new_example(example_title, current_example, old_examples, yaml_file['paths'], with_schema_properties)
+    end
+
+    def full_rspec_description
+      with_rspec_examples ? SwaggerAutogenerate::SwaggerTrace.rspec_description : nil
+    end
+
+    class << self
+      attr_accessor :rspec_description
     end
   end
 end
