@@ -10,6 +10,7 @@ module SwaggerAutogenerate
       @security = ::SwaggerAutogenerate.configuration.security
       @swagger_config = ::SwaggerAutogenerate.configuration.swagger_config
       @response_status = ::SwaggerAutogenerate.configuration.response_status
+      @default_path = ::SwaggerAutogenerate.configuration.default_path
       @request = request
       @response = response
       @@paths = {}
@@ -20,12 +21,20 @@ module SwaggerAutogenerate
       write_swagger_trace
     end
 
-    def self.swagger_environment_variable
-      ::SwaggerAutogenerate.configuration.swagger_environment_variable
+    def self.swagger_path_environment_variable
+      ::SwaggerAutogenerate.configuration.swagger_path_environment_variable
     end
 
-    def swagger_environment_variable
-      SwaggerTrace.swagger_environment_variable
+    def swagger_path_environment_variable
+      SwaggerTrace.swagger_path_environment_variable
+    end
+
+    def self.generate_swagger_environment_variable
+      ::SwaggerAutogenerate.configuration.generate_swagger_environment_variable
+    end
+
+    def generate_swagger_environment_variable
+      SwaggerTrace.generate_swagger_environment_variable
     end
 
     def self.environment_name
@@ -40,7 +49,7 @@ module SwaggerAutogenerate
 
     attr_reader :request, :response, :current_path, :yaml_file, :configuration,
                 :with_config, :with_multiple_examples, :with_rspec_examples,
-                :with_response_description, :security, :response_status, :swagger_config
+                :with_response_description, :security, :response_status, :swagger_config, :default_path
 
     # main methods
 
@@ -431,10 +440,14 @@ module SwaggerAutogenerate
     def swagger_location
       return @swagger_location if instance_variable_defined?(:@swagger_location)
 
-      if ENV[swagger_environment_variable].include?('.yaml') || ENV[swagger_environment_variable].include?('.yml')
-        @swagger_location = Rails.root.join(ENV.fetch(swagger_environment_variable, nil).to_s).to_s
+      if ENV[generate_swagger_environment_variable].present?
+        directory_path = Rails.root.join(default_path).to_s
+        FileUtils.mkdir_p(directory_path) unless File.directory?(directory_path)
+        @swagger_location = "#{directory_path}/#{tags.first}.yaml"
+      elsif ENV[swagger_path_environment_variable].include?('.yaml') || ENV[swagger_path_environment_variable].include?('.yml')
+        @swagger_location = Rails.root.join(ENV.fetch(swagger_path_environment_variable, nil).to_s).to_s
       else
-        directory_path = Rails.root.join(ENV.fetch(swagger_environment_variable, nil).to_s).to_s
+        directory_path = Rails.root.join(ENV.fetch(swagger_path_environment_variable, nil).to_s).to_s
         FileUtils.mkdir_p(directory_path) unless File.directory?(directory_path)
         @swagger_location = "#{directory_path}/#{tags.first}.yaml"
       end

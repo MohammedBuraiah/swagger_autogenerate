@@ -15,7 +15,8 @@ module SwaggerAutogenerate
   end
 
   def self.allow_swagger?
-    ENV[SwaggerTrace.swagger_environment_variable].present? && Rails.env.send("#{SwaggerTrace.environment_name.to_s}?")
+    (ENV[SwaggerTrace.swagger_path_environment_variable].present? || ENV[SwaggerTrace.generate_swagger_environment_variable].present?) &&
+    Rails.env.send("#{SwaggerTrace.environment_name.to_s}?")
   end
 end
 

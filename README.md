@@ -64,7 +64,7 @@ This file should contain the test scenarios for each action (e.g., index, show, 
 
 3) Run the spec code using the rspec command and set the environment variable SWAGGER to the desired YAML file name. For example:
 ```
-SWAGGER='employee_apis.yaml' rspec spec/your_path/employees_controller_spec.rb
+SWAGGER_PATH='employee_apis.yaml' rspec spec/your_path/employees_controller_spec.rb
 ```
 4) This command runs the spec file and instructs the swagger_autogenerate gem to generate Swagger YAML documentation and save it to the file named employee_apis.yaml.
 5) Once the command finishes executing, you will have the Swagger YAML documentation generated based on the test scenarios in the employees_controller_spec.rb file.

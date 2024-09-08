@@ -1,8 +1,8 @@
 module SwaggerAutogenerate
   class Configuration
     attr_accessor :with_config, :with_multiple_examples, :with_rspec_examples, :with_example_description,
-                  :with_response_description, :swagger_environment_variable,
-                  :environment_name, :security, :swagger_config, :response_status
+                  :with_response_description, :swagger_path_environment_variable, :generate_swagger_environment_variable,
+                  :default_path, :environment_name, :security, :swagger_config, :response_status
 
     def initialize
       @with_config = true
@@ -11,7 +11,9 @@ module SwaggerAutogenerate
       # remove this when we do not need it any more
       @with_example_description = true
       @with_response_description = true
-      @swagger_environment_variable = 'SWAGGER'
+      @swagger_path_environment_variable = 'SWAGGER_PATH'
+      @generate_swagger_environment_variable = 'SWAGGER_GENERATE'
+      @default_path = 'swagger'
       @environment_name = :test
       @security = default_security
       @swagger_config = default_swagger_config
