@@ -303,13 +303,19 @@ module SwaggerAutogenerate
           { 'type' => 'array', 'items' => { 'oneOf' => item_schemas.uniq } }
         end
       when String
-        { 'type' => 'string', 'example' => json }
+        if is_valid_date?(json)
+          { 'type' => 'Date', 'example' => json.to_date.to_s }
+        else
+          { 'type' => 'string', 'example' => json.to_s }
+        end
       when Integer
         { 'type' => 'integer', 'example' => json }
       when Float
         { 'type' => 'number', 'example' => json }
       when TrueClass, FalseClass
         { 'type' => 'boolean', 'example' => json }
+      when Date, Time, DateTime
+        { 'type' => 'Date', 'example' => json.to_date.to_s }
       else
         { 'type' => 'string', 'example' => json.to_s }
       end
