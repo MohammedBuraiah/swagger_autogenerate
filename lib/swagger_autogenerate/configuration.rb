@@ -82,9 +82,4 @@ module SwaggerAutogenerate
   def self.configure
     yield(configuration)
   end
-
-  def self.extract_description(full_rspec_description)
-    parts = full_rspec_description.split(' ')
-    parts&.length > 1 ? parts[2..-1].join(" ") : full_rspec_description
-  end
 end

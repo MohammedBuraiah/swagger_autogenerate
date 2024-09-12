@@ -528,9 +528,11 @@ module SwaggerAutogenerate
     end
 
     def handel_name_last_example(old_examples)
-      last_example = old_examples.keys.last
-      last_example += '-1' if json_example_plus_one(last_example) == last_example
-      json_example_plus_one(last_example)
+      last_example = full_rspec_description || old_examples.keys.last
+      if old_examples.keys.include?(last_example)
+        last_example += '-1'
+        json_example_plus_one(last_example)
+      end
     end
 
     def add_properties_to_schema(last_example, main_path = yaml_file['paths'][current_path])
