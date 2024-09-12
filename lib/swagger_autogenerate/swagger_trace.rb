@@ -396,14 +396,15 @@ module SwaggerAutogenerate
     end
 
     def is_valid_date?(string)
-      Date.parse(string)
+
+      Date.strptime(string)
       true
     rescue ArgumentError
       false
     end
 
     def convert_to_date(string)
-      datetime = DateTime.parse(string)
+      datetime = DateTime.strptime(string)
       datetime.strftime('%Y-%m-%d')
     rescue ArgumentError
       string
