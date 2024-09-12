@@ -25,7 +25,7 @@ if defined?(RSpec) && SwaggerAutogenerate.allow_swagger?
 
   RSpec.configure do |config|
     config.before(:each) do |example|
-      SwaggerAutogenerate::SwaggerTrace.rspec_description = SwaggerAutogenerate.extract_description(example.metadata[:full_description])
+      SwaggerAutogenerate::SwaggerTrace.rspec_description = example&.metadata.dig(:example_group, :description)
     end
   end
 end
