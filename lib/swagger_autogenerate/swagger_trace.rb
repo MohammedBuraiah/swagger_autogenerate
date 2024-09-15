@@ -13,6 +13,7 @@ module SwaggerAutogenerate
       @default_path = ::SwaggerAutogenerate.configuration.default_path
       @request = request
       @response = response
+      @action_for_old_examples = ::SwaggerAutogenerate.configuration.action_for_old_examples
       @@paths = {}
     end
 
@@ -49,7 +50,8 @@ module SwaggerAutogenerate
 
     attr_reader :request, :response, :current_path, :yaml_file, :configuration,
                 :with_config, :with_multiple_examples, :with_rspec_examples,
-                :with_response_description, :security, :response_status, :swagger_config, :default_path
+                :with_response_description, :security, :response_status, :swagger_config,
+                :default_path, :action_for_old_examples
 
     # main methods
 
@@ -62,6 +64,9 @@ module SwaggerAutogenerate
 
       @current_path = path
       method = request.method.to_s.downcase
+
+      process_replacing_examples
+
       hash =
         {
           method => {
@@ -130,6 +135,26 @@ module SwaggerAutogenerate
     end
 
     # Helpers
+
+    def process_replacing_examples
+      $removed_examples ||= []
+      if action_for_old_examples == :replace && !$removed_examples.include?({ @current_path => request.method.to_s.downcase })
+        current_yaml_file = YAML.load(
+          File.read(swagger_location),
+          aliases: true,
+          permitted_classes: [Symbol, Date, ActiveSupport::HashWithIndifferentAccess]
+        )
+
+        current_yaml_file["paths"][@current_path][request.method.to_s.downcase] = {}
+
+        File.open(swagger_location, 'w') do |file|
+          result = add_quotes_to_dates(YAML.dump(current_yaml_file))
+          file.write(result)
+        end
+
+        $removed_examples << { @current_path => request.method.to_s.downcase }
+      end
+    end
 
     def add_quotes_to_dates(string)
       string = remove_quotes_in_dates(string)
@@ -396,7 +421,6 @@ module SwaggerAutogenerate
     end
 
     def is_valid_date?(string)
-
       Date.strptime(string)
       true
     rescue ArgumentError
