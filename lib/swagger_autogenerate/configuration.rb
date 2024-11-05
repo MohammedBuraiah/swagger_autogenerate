@@ -1,7 +1,7 @@
 module SwaggerAutogenerate
   class Configuration
     attr_accessor :with_config, :with_multiple_examples, :with_rspec_examples, :with_example_description,
-                  :with_response_description, :swagger_path_environment_variable, :generate_swagger_environment_variable,
+                  :with_response_description, :with_payload_properties, :swagger_path_environment_variable, :generate_swagger_environment_variable,
                   :default_path, :environment_name, :security, :swagger_config, :response_status, :action_for_old_examples
 
     def initialize
@@ -10,6 +10,7 @@ module SwaggerAutogenerate
       @with_rspec_examples = true
       # remove this when we do not need it any more
       @with_example_description = true
+      @with_payload_properties = true
       @with_response_description = true
       @action_for_old_examples = :append # :replace or :append
       @swagger_path_environment_variable = 'SWAGGER_GENERATE_PATH'
