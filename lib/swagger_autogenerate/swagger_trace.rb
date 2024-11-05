@@ -7,6 +7,7 @@ module SwaggerAutogenerate
       @with_multiple_examples = ::SwaggerAutogenerate.configuration.with_multiple_examples
       @with_rspec_examples = ::SwaggerAutogenerate.configuration.with_rspec_examples
       @with_response_description = ::SwaggerAutogenerate.configuration.with_response_description
+      @with_payload_properties = ::SwaggerAutogenerate.configuration.with_payload_properties
       @security = ::SwaggerAutogenerate.configuration.security
       @swagger_config = ::SwaggerAutogenerate.configuration.swagger_config
       @response_status = ::SwaggerAutogenerate.configuration.response_status
@@ -50,7 +51,7 @@ module SwaggerAutogenerate
 
     attr_reader :request, :response, :current_path, :yaml_file, :configuration,
                 :with_config, :with_multiple_examples, :with_rspec_examples,
-                :with_response_description, :security, :response_status, :swagger_config,
+                :with_response_description, :with_payload_properties, :security, :response_status, :swagger_config,
                 :default_path, :action_for_old_examples
 
     # main methods
@@ -59,7 +60,10 @@ module SwaggerAutogenerate
       path = request.path
 
       request.path_parameters.except(:controller, :format, :action).each do |k, v|
-        path = path.gsub!(v, "{#{k}}")
+        path_array = path.split('/')
+        index = path_array.rindex(v)
+        path_array[index] = "{#{k}}"
+        path.replace(path_array.join('/'))
       end
 
       @current_path = path
@@ -75,7 +79,7 @@ module SwaggerAutogenerate
             'requestBody' => request_body,
             'parameters' => parameters,
             'responses' => {},
-            'security' => security
+            'security' => current_security
           }
         }
 
@@ -98,6 +102,7 @@ module SwaggerAutogenerate
 
     def create_file
       File.open(swagger_location, 'w') do |file|
+        return file.write(YAML.dump({ 'paths' => {} })) if paths.blank?
         data = with_config ? swagger_config : {}
         data['paths'] = paths
         organize_result(data['paths'])
@@ -108,18 +113,21 @@ module SwaggerAutogenerate
         current_example = old_examples[example_title]
         new_example(example_title, current_example, old_examples, data['paths'], true)
         # result
-
-        result = add_quotes_to_dates(YAML.dump(data))
+        result = reformat_dates_in_hash(data)
+        result = convert_to_hash(result)
+        result = YAML.dump(result)
         file.write(result)
       end
     end
 
     def edit_file
-      @yaml_file = YAML.load(
-        File.read(swagger_location),
-        aliases: true,
-        permitted_classes: [Symbol, Date, ActiveSupport::HashWithIndifferentAccess]
-      )
+      @yaml_file = \
+        YAML.safe_load(
+          File.read(swagger_location),
+          aliases: true,
+          permitted_classes: [Symbol, DateTime, Date, Time, ActiveSupport::HashWithIndifferentAccess],
+          permitted_symbols: []
+        )
 
       return create_file if yaml_file.nil? || yaml_file['paths'].nil?
 
@@ -129,7 +137,9 @@ module SwaggerAutogenerate
       organize_result(yaml_file['paths'])
       @yaml_file = convert_to_hash(yaml_file)
       File.open(swagger_location, 'w') do |file|
-        result = add_quotes_to_dates(YAML.dump(yaml_file))
+        result = reformat_dates_in_hash(yaml_file)
+        result = convert_to_hash(result)
+        result = YAML.dump(result)
         file.write(result)
       end
     end
@@ -137,6 +147,7 @@ module SwaggerAutogenerate
     # Helpers
 
     def process_replacing_examples
+      create_file_if_not_exist
       $removed_examples ||= []
       if action_for_old_examples == :replace && !$removed_examples.include?({ @current_path => request.method.to_s.downcase })
         current_yaml_file = YAML.load(
@@ -145,10 +156,13 @@ module SwaggerAutogenerate
           permitted_classes: [Symbol, Date, ActiveSupport::HashWithIndifferentAccess]
         )
 
-        current_yaml_file["paths"][@current_path][request.method.to_s.downcase] = {}
+        hash = { "paths" => { @current_path => { request.method.to_s.downcase => {} } } }
 
+        current_yaml_file&.merge!(hash)
         File.open(swagger_location, 'w') do |file|
-          result = add_quotes_to_dates(YAML.dump(current_yaml_file))
+          result = reformat_dates_in_hash(current_yaml_file)
+          result = convert_to_hash(result)
+          result = YAML.dump(result)
           file.write(result)
         end
 
@@ -156,13 +170,23 @@ module SwaggerAutogenerate
       end
     end
 
-    def add_quotes_to_dates(string)
-      string = remove_quotes_in_dates(string)
-      string.gsub(/\b\d{4}-\d{2}-\d{2}\b/, "'\\0'")
-    end
-
-    def remove_quotes_in_dates(string)
-      string.gsub(/'(\d{4}-\d{2}-\d{2})'/, '\1')
+    def reformat_dates_in_hash(data)
+      case data
+      when Hash
+        data.each do |key, value|
+          data[key] = reformat_dates_in_hash(value)
+        end
+      when Array
+        data.map! { |element| reformat_dates_in_hash(element) }
+      when String
+        if is_valid_date?(data)
+          convert_to_date(data).to_s
+        else
+          data
+        end
+      else
+        data
+      end
     end
 
     def convert_to_hash(obj)
@@ -231,11 +255,41 @@ module SwaggerAutogenerate
     end
 
     def tags
-      [ENV['tag'] || controller_name]
+      [yaml_file&.dig('paths', current_path, request.method.downcase, 'tags')&.last&.capitalize || ENV['tag'] || controller_name&.capitalize]
     end
 
     def summary
-      URI.parse(request.path).path
+      yaml_file&.dig('paths', current_path, request.method.downcase, 'summary') || handel_summary(request.method.downcase, current_path)
+    end
+
+    def handel_summary(method, path)
+      path_segments = path.split('/')
+      resource = format_path_to_title(path)&.gsub('  ', ' ')
+      id_segment = path.include?('{')
+
+      case method.upcase
+      when 'GET'
+        id_segment ? "Get #{resource}" : "Get All #{resource&.pluralize}"
+      when 'POST'
+        "Create #{resource}"
+      when 'PUT'
+        "Update #{resource}"
+      when 'DELETE'
+        "Delete #{resource}"
+      else
+        ""
+      end
+    end
+
+    def format_path_to_title(path)
+      cleaned_path = path.sub(%r{^/v\d+/}, '')
+      cleaned_path.gsub!(/\{[^}]+\}/, '')
+      title = cleaned_path.split('/').map(&:capitalize).join(' ')
+      title
+    end
+
+    def current_security
+      yaml_file&.dig('paths', current_path, request.method.downcase, 'security') || security
     end
 
     def response_description
@@ -337,8 +391,12 @@ module SwaggerAutogenerate
           { 'type' => 'array', 'items' => { 'oneOf' => item_schemas.uniq } }
         end
       when String
-        if is_valid_date?(json)
-          { 'type' => 'Date', 'example' => json.to_date.to_s }
+        if integer?(json)
+          { 'type' => 'integer', 'example' => json.to_i }
+        elsif number?(json)
+          { 'type' => 'number', 'example' => json.to_f }
+        elsif is_valid_date?(json)
+          { 'type' => 'string', 'example' => json.to_date.to_s }
         else
           { 'type' => 'string', 'example' => json.to_s }
         end
@@ -349,7 +407,7 @@ module SwaggerAutogenerate
       when TrueClass, FalseClass
         { 'type' => 'boolean', 'example' => json }
       when Date, Time, DateTime
-        { 'type' => 'Date', 'example' => json.to_date.to_s }
+        { 'type' => 'string', 'example' => json.to_date.to_s }
       else
         { 'type' => 'string', 'example' => json.to_s }
       end
@@ -412,6 +470,12 @@ module SwaggerAutogenerate
       false
     end
 
+    def integer?(value)
+      true if Integer(value)
+    rescue StandardError
+      false
+    end
+
     def example(value)
       return value.to_i if number?(value)
       return convert_to_date(value) if value.instance_of?(String) && is_valid_date?(value)
@@ -429,7 +493,8 @@ module SwaggerAutogenerate
 
     def convert_to_date(string)
       datetime = Date.strptime(string)
-      datetime.strftime('%Y-%m-%d')
+      return Date.parse(string).strftime('%Y/%m/%d') if datetime.year == 1
+      datetime.strftime('%Y/%m/%d')
     rescue ArgumentError
       string
     end
@@ -474,13 +539,13 @@ module SwaggerAutogenerate
       if ENV[generate_swagger_environment_variable].present?
         directory_path = Rails.root.join(default_path).to_s
         FileUtils.mkdir_p(directory_path) unless File.directory?(directory_path)
-        @swagger_location = "#{directory_path}/#{tags.first}.yaml"
+        @swagger_location = "#{directory_path}/#{snake_case(tags&.first)}.yaml"
       elsif ENV[swagger_path_environment_variable].include?('.yaml') || ENV[swagger_path_environment_variable].include?('.yml')
         @swagger_location = Rails.root.join(ENV.fetch(swagger_path_environment_variable, nil).to_s).to_s
       else
         directory_path = Rails.root.join(ENV.fetch(swagger_path_environment_variable, nil).to_s).to_s
         FileUtils.mkdir_p(directory_path) unless File.directory?(directory_path)
-        @swagger_location = "#{directory_path}/#{tags.first}.yaml"
+        @swagger_location = "#{directory_path}/#{snake_case(tags&.first)}.yaml"
       end
     end
 
@@ -539,14 +604,17 @@ module SwaggerAutogenerate
     end
 
     def new_example(example_title, current_example, old_examples, all_paths = yaml_file['paths'], with_schema_properties = false)
-      if !old_examples.value?(current_example)
-        last_example = handel_name_last_example(old_examples)
-        last_example ||= example_title
-        last_example = example_title unless with_multiple_examples
-        all_paths[current_path][request.method.downcase]['responses'][response.status.to_s]['content']['application/json']['examples'][last_example] = current_example
-        add_properties_to_schema(last_example, all_paths[current_path])
-      elsif with_schema_properties
-        add_properties_to_schema(full_rspec_description.present? ? full_rspec_description : 'example-0', all_paths[current_path])
+      if with_multiple_examples || old_examples&.keys&.count.to_i <= 1
+        if !old_examples&.value?(current_example)
+          last_example = handel_name_last_example(old_examples)
+          last_example ||= example_title
+          last_example = example_title
+          hash = { 'examples' => { last_example => current_example } }
+          all_paths[current_path][request.method.downcase]['responses'][response.status.to_s]['content']['application/json'].deep_merge!(hash)
+          add_properties_to_schema(last_example, all_paths[current_path])
+        elsif with_schema_properties
+          add_properties_to_schema(full_rspec_description.present? ? full_rspec_description : 'example-0', all_paths[current_path])
+        end
       end
 
       true
@@ -554,32 +622,34 @@ module SwaggerAutogenerate
 
     def handel_name_last_example(old_examples)
       last_example = full_rspec_description || old_examples.keys.last
-      if old_examples.keys.include?(last_example)
+      if old_examples&.keys&.include?(last_example)
         last_example += '-1'
         json_example_plus_one(last_example)
       end
     end
 
     def add_properties_to_schema(last_example, main_path = yaml_file['paths'][current_path])
-      parameters = {}
-      parameters.merge!(request_parameters.values.first, query_parameters.values.first, path_parameters.values.first)
-      hash = {
-        last_example => build_properties(parameters.as_json)
-      }
+      if with_payload_properties
+        parameters = {}
+        parameters.merge!(request_parameters.values.first, query_parameters.values.first, path_parameters.values.first)
+        hash = {
+          last_example => build_properties(parameters.as_json)
+        }
 
-      main_path[request.method.downcase]['responses'][response.status.to_s].deep_merge!(
-        {
-          'content' => {
-            'application/json' => {
-              'schema' => {
-                'description' => 'These are the payloads for each example',
-                'type' => 'object',
-                'properties' => hash
+        main_path[request.method.downcase]['responses'][response.status.to_s].deep_merge!(
+          {
+            'content' => {
+              'application/json' => {
+                'schema' => {
+                  'description' => 'These are the payloads for each example',
+                  'type' => 'object',
+                  'properties' => hash
+                }
               }
             }
           }
-        }
-      )
+        )
+      end
     end
 
     def apply_yaml_file_changes
@@ -595,16 +665,19 @@ module SwaggerAutogenerate
     # checks
 
     def organize_result(current_paths)
-      new_hash = {
-        'tags' => tags,
-        'summary' => summary
-      }
-      new_hash['parameters'] = current_paths[current_path][request.method.downcase]['parameters'] if current_paths[current_path][request.method.downcase]['parameters']
-      new_hash['requestBody'] = current_paths[current_path][request.method.downcase]['requestBody'] if current_paths[current_path][request.method.downcase]['requestBody']
-      new_hash['responses'] = current_paths[current_path][request.method.downcase]['responses']
-      new_hash['security'] = security
+      if current_paths.dig(current_path, request.method.downcase).present?
+        new_hash = {
+          'tags' => tags,
+          'summary' => summary
+        }
 
-      current_paths[current_path][request.method.downcase] = new_hash
+        new_hash['parameters'] = current_paths[current_path][request.method.downcase]['parameters'] if current_paths.dig(current_path, request.method.downcase, 'parameters')
+        new_hash['requestBody'] = current_paths[current_path][request.method.downcase]['requestBody'] if current_paths.dig(current_path, request.method.downcase, 'requestBody')
+        new_hash['responses'] = current_paths[current_path][request.method.downcase]['responses']
+        new_hash['security'] = current_security
+
+        current_paths[current_path][request.method.downcase] = new_hash
+      end
     end
 
     def check_path
@@ -637,13 +710,13 @@ module SwaggerAutogenerate
     end
 
     def check_parameters
-      if old_paths[current_path][request.method.downcase]['parameters'].blank?
-        yaml_file['paths'][current_path][request.method.downcase]['parameters'] = paths[current_path][request.method.downcase]['parameters']
+      if old_paths[current_path][request.method.downcase]['parameters'].blank? || old_paths.dig(current_path, request.method.downcase, 'responses')&.key?('200')
+        yaml_file['paths'][current_path][request.method.downcase]['parameters'] = paths.dig(current_path, request.method.downcase, 'parameters') if paths.dig(current_path, request.method.downcase, 'parameters').present?
       end
     end
 
     def check_parameter
-      param_names = paths[current_path][request.method.downcase]['parameters'].pluck('name') - yaml_file['paths'][current_path][request.method.downcase]['parameters'].pluck('name')
+      param_names = Array.wrap(paths[current_path][request.method.downcase]['parameters']&.pluck('name')) - Array.wrap(yaml_file['paths'][current_path][request.method.downcase]['parameters']&.pluck('name'))
       param_names.each do |param_name|
         param = paths[current_path][request.method.downcase]['parameters'].find { |parameter| parameter['name'] == param_name }
         yaml_file['paths'][current_path][request.method.downcase]['parameters'].push(param)
@@ -679,6 +752,20 @@ module SwaggerAutogenerate
 
     def full_rspec_description
       with_rspec_examples ? SwaggerAutogenerate::SwaggerTrace.rspec_description : nil
+    end
+
+    def create_file_if_not_exist
+      create_file unless File.exist?(swagger_location)
+    end
+
+    def snake_case(text)
+      return text&.downcase if text&.match?(/\A[A-Z]+\z/)
+
+      text
+        .gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
+        .gsub(/([a-z])([A-Z])/, '\1_\2')
+        .downcase
+        .tr(' ', '_')
     end
 
     class << self
