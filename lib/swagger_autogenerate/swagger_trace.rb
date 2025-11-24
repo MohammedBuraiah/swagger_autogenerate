@@ -216,8 +216,11 @@ module SwaggerAutogenerate
     def schema_data(value)
       type = schema_type(value)
       hash = { 'type' => type }
-      hash['properties'] = {}
-      hash['properties'] = properties_data(value) if type == 'object' && !value.nil?
+
+      if type == 'object'
+        # FIX: Removed additionalProperties: true as requested
+        hash['properties'] = (!value.nil? && value.present?) ? properties_data(value) : {}
+      end
 
       hash
     end
@@ -231,14 +234,35 @@ module SwaggerAutogenerate
       'object'
     end
 
-    def set_parameters(parameters, parameter, required: false)
-      return if parameter.blank?
+    def set_complex_parameter(parameters, name, in_type, value, required: false)
+      hash =
+        {
+          'name' => name.to_s,
+          'in' => in_type.to_s,
+          'schema' => schema_data(value)
+        }
 
-      parameter.values.first.each do |key, value|
+      if in_type.to_s == 'query' && hash['schema']['type'] == 'object'
+        hash['style'] = 'deepObject'
+        hash['explode'] = true
+      end
+
+      hash['required'] = required if required
+
+      parameters.push(hash)
+    end
+
+    def set_individual_parameters(parameters, parameter_set, required: false)
+      return if parameter_set.blank?
+
+      in_type = parameter_set.keys.first.to_s
+      params_hash = parameter_set.values.first
+
+      params_hash.each do |key, value|
         hash =
           {
             'name' => key.to_s,
-            'in' => parameter.keys.first.to_s,
+            'in' => in_type,
             'schema' => schema_data(value),
             'example' => example(value)
           }
@@ -415,8 +439,6 @@ module SwaggerAutogenerate
 
     def merge_array_schemas(schemas)
       return {} if schemas.empty?
-
-      # Attempt to merge all schemas into a single schema
       schemas.reduce do |merged, schema|
         merge_properties(merged, schema)
       end
@@ -458,9 +480,7 @@ module SwaggerAutogenerate
 
     def content_body(data)
       hash = {}
-      # hash.merge!(content_json(data))
       hash.merge!(json_to_content_form_data(data))
-
       { 'content' => hash }
     end
 
@@ -504,9 +524,16 @@ module SwaggerAutogenerate
     def parameters
       parameters = []
 
-      set_parameters(parameters, path_parameters, required: true)
-      set_parameters(parameters, request_parameters) if request.request_parameters.blank?
-      set_parameters(parameters, query_parameters)
+      # 1. Path Parameters
+      set_individual_parameters(parameters, path_parameters, required: true)
+
+      # 2. Query Parameters
+      query_parameters.each do |name, value|
+        set_complex_parameter(parameters, name.to_s, 'query', value)
+      end
+
+      # 3. Request Parameters
+      set_individual_parameters(parameters, request_parameters) if request.request_parameters.blank?
 
       parameters
     end
@@ -516,7 +543,7 @@ module SwaggerAutogenerate
     end
 
     def query_parameters
-      { query: request.query_parameters }
+      request.query_parameters
     end
 
     def path_parameters
@@ -575,7 +602,7 @@ module SwaggerAutogenerate
 
     def example_description
       body_ = request_parameters.values.first.present? ? { 'body_params' => request_parameters.values.first&.as_json }: nil
-      query_ = query_parameters.values.first.present? ? { 'query_params' => query_parameters.values.first&.as_json } : nil
+      query_ = query_parameters.present? ? { 'query_params' => query_parameters&.as_json } : nil
       path_ = path_parameters.values.first.present? ? { 'path_params' => path_parameters.values.first&.as_json }: nil
 
       [path_, query_, body_].
@@ -631,7 +658,7 @@ module SwaggerAutogenerate
     def add_properties_to_schema(last_example, main_path = yaml_file['paths'][current_path])
       if with_payload_properties
         parameters = {}
-        parameters.merge!(request_parameters.values.first, query_parameters.values.first, path_parameters.values.first)
+        parameters.merge!(request_parameters.values.first, query_parameters, path_parameters.values.first)
         hash = {
           last_example => build_properties(parameters.as_json)
         }
@@ -652,10 +679,15 @@ module SwaggerAutogenerate
       end
     end
 
+    # FIX: Run check_parameters and check_parameter sequentially so explicit logic runs
     def apply_yaml_file_changes
-      (check_path || check_method || check_status) &&
-        (check_parameters || check_parameter) &&
-        (check_request_bodys || check_request_body)
+      check_path
+      check_method
+      check_status
+      check_parameters
+      check_parameter
+      check_request_bodys
+      check_request_body
     end
 
     def old_paths
@@ -709,17 +741,44 @@ module SwaggerAutogenerate
       end
     end
 
+    # FIX: Stop overwriting parameters. Only initialize if missing.
     def check_parameters
-      if old_paths[current_path][request.method.downcase]['parameters'].blank? || old_paths.dig(current_path, request.method.downcase, 'responses')&.key?('200')
-        yaml_file['paths'][current_path][request.method.downcase]['parameters'] = paths.dig(current_path, request.method.downcase, 'parameters') if paths.dig(current_path, request.method.downcase, 'parameters').present?
+      if old_paths[current_path][request.method.downcase]['parameters'].nil?
+        yaml_file['paths'][current_path][request.method.downcase]['parameters'] = []
       end
     end
 
+    # FIX: Merge logic for schemas
     def check_parameter
-      param_names = Array.wrap(paths[current_path][request.method.downcase]['parameters']&.pluck('name')) - Array.wrap(yaml_file['paths'][current_path][request.method.downcase]['parameters']&.pluck('name'))
-      param_names.each do |param_name|
-        param = paths[current_path][request.method.downcase]['parameters'].find { |parameter| parameter['name'] == param_name }
-        yaml_file['paths'][current_path][request.method.downcase]['parameters'].push(param)
+      current_params = paths[current_path][request.method.downcase]['parameters'] || []
+
+      # Ensure existing parameters list exists
+      yaml_file['paths'][current_path][request.method.downcase]['parameters'] ||= []
+      existing_params_list = yaml_file['paths'][current_path][request.method.downcase]['parameters']
+
+      current_params.each do |param|
+        # Check if parameter with same name AND 'in' location exists
+        existing_param = existing_params_list.find { |p| p['name'] == param['name'] && p['in'] == param['in'] }
+
+        if existing_param
+          # If it exists, merge the schemas (accumulate properties)
+          merge_param_schemas(existing_param, param)
+        else
+          # If it is new, just add it
+          existing_params_list.push(param)
+        end
+      end
+    end
+
+    # Helper method to merge schema properties of object parameters
+    def merge_param_schemas(existing, new_param)
+      # We only merge if both are objects and have schemas
+      if existing.dig('schema', 'type') == 'object' && new_param.dig('schema', 'type') == 'object'
+        existing_props = existing.dig('schema', 'properties') || {}
+        new_props = new_param.dig('schema', 'properties') || {}
+
+        # Merge new properties into existing ones (Accumulate keys)
+        existing['schema']['properties'] = existing_props.merge(new_props)
       end
     end
 
