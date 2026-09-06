@@ -1,4 +1,23 @@
 module SwaggerAutogenerate
   VERSION: String
-  # See the writing guide of rbs: https://github.com/ruby/rbs#guides
+
+  def self.configuration: () -> Configuration
+  def self.configure: () { (Configuration) -> void } -> void
+  def self.reset_configuration!: () -> Configuration
+  def self.generate?: () -> bool
+  def self.allow_swagger?: () -> bool
+  def self.env_requested?: () -> bool
+  def self.test_environment?: () -> bool
+
+  class Configuration
+    attr_accessor with_config: bool
+    attr_accessor with_multiple_examples: bool
+    attr_accessor with_rspec_examples: bool
+    attr_accessor default_path: String?
+    attr_accessor security: Array[Hash[String, Array[untyped]]]
+    attr_accessor auto_include: bool
+
+    def resolved_default_path: () -> String
+    def resolved_swagger_config: () -> Hash[String, untyped]
+  end
 end

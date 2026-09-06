@@ -1,31 +1,118 @@
+# frozen_string_literal: true
+
 module SwaggerAutogenerate
+  # Holds gem settings. Defaults work with any Rails app and rswag-api / rswag-ui.
+  #
+  # Override only what you need:
+  #
+  #   SwaggerAutogenerate.configure do |config|
+  #     config.default_path = 'swagger/v1'
+  #     config.info_title = 'My API'
+  #     config.security = [{ 'bearerAuth' => [] }]
+  #   end
+  #
   class Configuration
-    attr_accessor :with_config, :with_multiple_examples, :with_rspec_examples, :with_example_description,
-                  :with_response_description, :with_payload_properties, :swagger_path_environment_variable, :generate_swagger_environment_variable,
-                  :default_path, :environment_name, :security, :swagger_config, :response_status, :action_for_old_examples
+    ATTRS = %i[
+      with_config
+      with_multiple_examples
+      with_rspec_examples
+      with_example_description
+      with_response_description
+      with_payload_properties
+      swagger_path_environment_variable
+      generate_swagger_environment_variable
+      default_path
+      environment_name
+      security
+      swagger_config
+      response_status
+      action_for_old_examples
+      auto_include
+      info_title
+      info_description
+      info_version
+      openapi_version
+      servers
+      security_schemes
+    ].freeze
+
+    attr_accessor(*ATTRS)
 
     def initialize
+      apply_defaults!
+    end
+
+    def apply_defaults!
       @with_config = true
       @with_multiple_examples = true
       @with_rspec_examples = true
-      # remove this when we do not need it any more
       @with_example_description = true
       @with_payload_properties = true
       @with_response_description = true
       @action_for_old_examples = :append # :replace or :append
       @swagger_path_environment_variable = 'SWAGGER_GENERATE_PATH'
       @generate_swagger_environment_variable = 'SWAGGER_GENERATE'
-      @default_path = 'swagger'
+      @default_path = nil # resolved lazily (rswag-aware)
       @environment_name = :test
-      @security = default_security
-      @swagger_config = default_swagger_config
+      @auto_include = true
+      @security = []
       @response_status = default_response_status
+      @swagger_config = nil # resolved lazily
+      @info_title = nil
+      @info_description = 'API documentation generated from request specs'
+      @info_version = '1.0.0'
+      @openapi_version = '3.0.1'
+      @servers = []
+      @security_schemes = {}
+    end
+
+    # Directory under Rails.root where YAML files are written.
+    # Prefers rswag swagger root when available, otherwise "swagger".
+    def resolved_default_path
+      explicit = @default_path
+      return explicit if explicit.present?
+
+      rswag_path || 'swagger'
+    end
+
+    def resolved_swagger_config
+      return @swagger_config if @swagger_config.present?
+
+      {
+        'openapi' => openapi_version,
+        'info' => {
+          'title' => resolved_info_title,
+          'description' => info_description,
+          'version' => info_version
+        },
+        'servers' => servers,
+        'components' => {
+          'securitySchemes' => security_schemes
+        }
+      }
+    end
+
+    def resolved_info_title
+      return info_title if info_title.present?
+
+      app_class = defined?(Rails) && Rails.respond_to?(:application) && Rails.application&.class
+      return 'API' unless app_class
+
+      if app_class.respond_to?(:module_parent_name)
+        app_class.module_parent_name
+      elsif app_class.respond_to?(:parent_name)
+        app_class.parent_name
+      else
+        'API'
+      end
+    rescue StandardError
+      'API'
     end
 
     def default_response_status
       {
         100 => 'The initial part of the request has been received, and the client should proceed with sending the remainder of the request',
-        101 => 'The server agrees to switch protocols and is acknowledging the client\'s request to change the protocol being used',
+        101 => "The server agrees to switch protocols and is acknowledging the client's request to change the protocol being used",
         200 => 'The request has succeeded',
         201 => 'The request has been fulfilled, and a new resource has been created as a result. The newly created resource is returned in the response body',
         202 => 'The request has been accepted for processing, but the processing has not been completed. The response may contain an estimated completion time or other status information',
@@ -48,32 +135,18 @@ module SwaggerAutogenerate
       }
     end
 
-    def default_swagger_config
-      {
-        'openapi' => '3.0.0',
-        'info' => {
-          'title' => 'title',
-          'description' => 'description',
-          'version' => '1.0.0'
-        },
-        'servers' => [],
-        'components' => {
-          'securitySchemes' => {
-            'locale' => {
-              'type' => 'apiKey',
-              'in' => 'query',
-              'name' => 'locale'
-            }
-          }
-        }
-      }
-    end
+    private
 
-    def default_security
-      [
-        { 'org_slug' => [] },
-        { 'locale' => [] }
-      ]
+    def rswag_path
+      return unless defined?(Rails) && Rails.root
+
+      # Common rswag layout: swagger/v1/swagger.yaml
+      return 'swagger/v1' if Rails.root.join('swagger/v1').directory?
+      return 'swagger' if Rails.root.join('swagger').directory?
+
+      nil
+    rescue StandardError
+      nil
     end
   end
 
@@ -83,5 +156,9 @@ module SwaggerAutogenerate
 
   def self.configure
     yield(configuration)
+  end
+
+  def self.reset_configuration!
+    @configuration = Configuration.new
   end
 end
