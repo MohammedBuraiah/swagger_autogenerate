@@ -3,6 +3,7 @@
 ### Improved
 - README documents full Rails + rswag host setup (routes, initializers, SwaggerCombiner, rake/bin)
 
+## [2.0.1] - 2026-09-03
 ## [2.0.0] - 2026-09-03
 
 ### Breaking
